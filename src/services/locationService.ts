@@ -38,6 +38,13 @@ let keepAwakeActive = false;
  */
 export const GPS_SETTLING_SEC = 5;
 
+/**
+ * A fix at least this accurate is trusted immediately. Matches the domain
+ * filter in geo.ts (MAX_ACCURACY_M), kept here so the wrapper can decide when
+ * the runner is safe to start on.
+ */
+export const GOOD_FIX_ACCURACY_M = 25;
+
 let startedAtMs = 0;
 let firstFixMs: number | null = null;
 
@@ -127,7 +134,11 @@ export async function start(
         distanceInterval: 0,
       },
       (position) => {
-        if (firstFixMs === null) firstFixMs = Date.now();
+        // Section 5: wait for accuracy to settle, not merely for the first
+        // fix. A 40 m fix is what the warm-up exists to discard.
+        if (firstFixMs === null && (position.coords.accuracy ?? 999) <= GOOD_FIX_ACCURACY_M) {
+          firstFixMs = Date.now();
+        }
         onPosition({
           t: position.timestamp,
           lat: position.coords.latitude,

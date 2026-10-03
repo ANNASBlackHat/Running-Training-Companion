@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -10,7 +11,15 @@ import {
 import { flatten } from '@/domain/flatten';
 import type { Workout } from '@/domain/types';
 import { useWorkoutStore } from '@/store/workouts';
+import { useSessionStore } from '@/store/sessions';
 import { SessionStrip } from '@/components/SessionStrip';
+import {
+  describeSnapshot,
+  isRecoverable,
+  recoverSession,
+  type InProgressSnapshot,
+} from '@/domain/recovery';
+import { clearInProgressSession, loadInProgressSession } from '@/services/storage';
 
 /**
  * Home.
@@ -57,8 +66,37 @@ export default function HomeScreen() {
   const router = useRouter();
   const workouts = useWorkoutStore((s) => s.workouts);
   const templates = useWorkoutStore((s) => s.templates);
+  const saveSession = useSessionStore((s) => s.saveSession);
+
+  // Section 8: offer to keep a session that a crash interrupted.
+  const [snapshot, setSnapshot] = useState<InProgressSnapshot | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadInProgressSession<InProgressSnapshot>().then((found) => {
+      if (!cancelled && isRecoverable(found)) setSnapshot(found);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const go = (workout: Workout) => router.push(`/workout/${workout.id}`);
+
+  const recover = () => {
+    if (!snapshot) return;
+    const workout = [...workouts, ...templates].find((w) => w.id === snapshot.workoutId);
+    if (workout) {
+      saveSession(recoverSession(snapshot, workout, `recovered-${snapshot.savedAt}`));
+    }
+    void clearInProgressSession();
+    setSnapshot(null);
+  };
+
+  const discard = () => {
+    void clearInProgressSession();
+    setSnapshot(null);
+  };
 
   return (
     <View style={styles.screen}>
@@ -72,6 +110,36 @@ export default function HomeScreen() {
           <Text style={[type.body, { color: color.run }]}>History</Text>
         </Pressable>
       </View>
+
+      {/* Section 8: a session interrupted by a crash is offered back. */}
+      {snapshot ? (
+        <View style={styles.recovery}>
+          <Text style={[type.body, { color: color.ink }]}>
+            Unfinished workout found
+          </Text>
+          <Text style={[type.caption, { color: color.inkMuted }]}>
+            {describeSnapshot(snapshot)} was recorded before the app closed.
+          </Text>
+          <View style={styles.recoveryActions}>
+            <Pressable
+              accessibilityRole='button'
+              accessibilityLabel='Keep unfinished workout'
+              onPress={recover}
+              style={styles.recoveryPrimary}
+            >
+              <Text style={[type.caption, { color: color.white }]}>Keep</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole='button'
+              accessibilityLabel='Discard unfinished workout'
+              onPress={discard}
+              style={styles.recoverySecondary}
+            >
+              <Text style={[type.caption, { color: color.ink }]}>Discard</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.list}>
         <Text style={[type.caption, styles.groupHeading, { color: color.inkMuted }]}>
@@ -123,6 +191,37 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: space.xl,
     paddingBottom: space.xxl,
+  },
+  recovery: {
+    marginHorizontal: space.xl,
+    marginTop: space.m,
+    padding: space.m,
+    borderRadius: radius.button,
+    backgroundColor: color.white,
+    borderWidth: 1,
+    borderColor: color.line,
+  },
+  recoveryActions: {
+    flexDirection: 'row',
+    gap: space.s,
+    marginTop: space.m,
+  },
+  recoveryPrimary: {
+    minHeight: 48,
+    paddingHorizontal: space.l,
+    borderRadius: radius.button,
+    backgroundColor: color.run,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recoverySecondary: {
+    minHeight: 48,
+    paddingHorizontal: space.l,
+    borderRadius: radius.button,
+    borderWidth: 2,
+    borderColor: color.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   groupHeading: {
     marginTop: space.l,

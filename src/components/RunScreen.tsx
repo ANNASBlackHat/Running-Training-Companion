@@ -23,6 +23,11 @@ import type { Workout } from '@/domain/types';
 import { dispatchCue, prepareSessionAudio } from '@/services/cueService';
 import { setBeepsEnabled } from '@/services/beepService';
 import * as locationService from '@/services/locationService';
+import {
+  clearInProgressSession,
+  saveInProgressSession,
+  SNAPSHOT_INTERVAL_MS,
+} from '@/services/storage';
 import { useSettingsStore } from '@/store/settings';
 import { useSessionStore } from '@/store/sessions';
 import { PaceLane } from '@/components/PaceLane';
@@ -58,10 +63,16 @@ export default function RunScreen({ workout, onFinish }: RunScreenProps) {
   const [run, setRun] = useState<SessionRun>(() => createSessionRun(segments));
   const [now, setNow] = useState(() => Date.now());
   const [locationError, setLocationError] = useState<string | null>(null);
+  // Section 5: stay in a GPS ready state until accuracy settles.
+  const [gpsReady, setGpsReady] = useState(false);
 
   // Cue events already dispatched, so a re-render never repeats a cue.
   const dispatched = useRef(0);
   const startMs = useRef(Date.now());
+  // Mirrors the latest run so the snapshot interval can read it without
+  // going through setState.
+  const runRef = useRef(run);
+  runRef.current = run;
 
   useEffect(() => {
     let cancelled = false;
@@ -73,8 +84,13 @@ export default function RunScreen({ workout, onFinish }: RunScreenProps) {
       const started = startSession(createSessionRun(segments), Date.now());
       if (!cancelled) setRun(started);
 
+      setGpsReady(false);
+
       const result = await locationService.start(
-        (point) => setRun((prev) => feedPosition(prev, point)),
+        (point) => {
+          setRun((prev) => feedPosition(prev, point));
+          if (locationService.isGpsReady(Date.now())) setGpsReady(true);
+        },
         (message) => {
           if (!cancelled) setLocationError(message);
         },
@@ -85,6 +101,8 @@ export default function RunScreen({ workout, onFinish }: RunScreenProps) {
 
     return () => {
       cancelled = true;
+      // Battery hygiene: release the location subscription and the keep-awake
+      // lock as soon as the screen goes away.
       void locationService.stop();
     };
     // Start once per workout.
@@ -102,6 +120,26 @@ export default function RunScreen({ workout, onFinish }: RunScreenProps) {
     return () => clearInterval(id);
   }, [run.runner.state]);
 
+  // Section 8 (crash safety, should-have): "write an in-progress snapshot
+  // every 30 s so a crash does not lose a whole session."
+  useEffect(() => {
+    if (run.runner.state !== 'running') return;
+
+    const id = setInterval(() => {
+      // Read the latest state from a ref: writing a snapshot is a side effect
+      // and must not go through setState, which would re-render for nothing.
+      const current = runRef.current;
+      void saveInProgressSession({
+        workoutId: workout.id,
+        savedAt: Date.now(),
+        results: current.runner.results,
+        track: current.runner.track,
+      });
+    }, SNAPSHOT_INTERVAL_MS);
+
+    return () => clearInterval(id);
+  }, [run.runner.state, workout.id]);
+
   // Dispatch any new cue events.
   useEffect(() => {
     const pending = run.events.slice(dispatched.current);
@@ -114,7 +152,10 @@ export default function RunScreen({ workout, onFinish }: RunScreenProps) {
   }, [run.events, voiceEnabled, beepsEnabled]);
 const finish = useCallback(
     (finalRun: SessionRun) => {
+      // Battery hygiene: stop tracking and release the keep-awake lock.
       void locationService.stop();
+      // The session is saved below, so the crash snapshot is no longer needed.
+      void clearInProgressSession();
       const durationSec = finalRun.runner.results.reduce((a, r) => a + r.durationSec, 0);
       const distanceM = finalRun.runner.results.reduce((a, r) => a + r.distanceM, 0);
       const sessionId = `session-${startMs.current.toString(36)}`;
@@ -201,6 +242,17 @@ const finish = useCallback(
             : locationError === 'denied'
               ? copy.locationDenied
               : copy.gpsSettling}
+        </Text>
+      ) : null}
+
+      {/* Section 5: the start screen shows a GPS ready state while accuracy
+          settles. The first fixes are discarded, so pace is unknown here. */}
+      {!locationError && !gpsReady && run.runner.state === 'running' ? (
+        <Text
+          style={[type.caption, styles.error, { color: palette.fg }]}
+          accessibilityRole='alert'
+        >
+          {copy.gpsSettling}
         </Text>
       ) : null}
 
