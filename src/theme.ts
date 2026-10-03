@@ -8,6 +8,8 @@
  * ink text." and "Color is never the only signal."
  */
 
+import type { TextStyle } from 'react-native';
+
 import { numberToWords, ordinalWords } from './domain/format';
 
 export const color = {
@@ -46,6 +48,16 @@ export const LIVE_PADDING = 24;
 export const TOUCH_TARGET = 48;
 export const LIVE_CONTROL_HEIGHT = 64;
 
+/**
+ * Type scale from UI Style Guide section 3.
+ *
+ * Section 3: "All numbers use tabular figures (`fontVariant: ['tabular-nums']`)
+ * so digits don't jitter as the timer ticks."
+ *
+ * The guide's snippet ends with `as const`, which makes fontVariant a readonly
+ * tuple; React Native's TextStyle requires a mutable array, so the scale is
+ * typed explicitly here instead. The values are unchanged.
+ */
 export const type = {
   timerXL: { fontFamily: 'BarlowCondensed_700Bold', fontSize: 132, fontVariant: ['tabular-nums'] },
   paceL: { fontFamily: 'BarlowCondensed_600SemiBold', fontSize: 64, fontVariant: ['tabular-nums'] },
@@ -53,7 +65,7 @@ export const type = {
   heading: { fontFamily: 'BarlowCondensed_600SemiBold', fontSize: 20 },
   body: { fontFamily: 'Barlow_400Regular', fontSize: 16 },
   caption: { fontFamily: 'Barlow_500Medium', fontSize: 13 },
-} as const;
+} satisfies Record<string, TextStyle>;
 
 /**
  * Voice cue copy, from UI Style Guide section 8:

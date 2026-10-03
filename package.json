@@ -29,7 +29,7 @@
     "@types/react-test-renderer": "^19.3.0",
     "jest": "^30.5.2",
     "jest-expo": "^57.0.5",
-    "react-test-renderer": "^19.3.0",
+    "react-test-renderer": "^19.2.3",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -55,8 +55,8 @@
     ],
     "testPathIgnorePatterns": [
       "/node_modules/",
-      "<rootDir>/src/__tests__/helpers/",
-      "<rootDir>/src/domain/__tests__/fixtures.ts"
+      "<rootDir>/src/domain/__tests__/fixtures.ts",
+      "<rootDir>/src/components/__tests__/fixtures.ts"
     ],
     "moduleNameMapper": {
       "^.*\\.(wav|mp3|m4a|aiff|ogg)$": "<rootDir>/jest.assetStub.js"
