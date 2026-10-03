@@ -52,6 +52,11 @@
       "src/**/*.{ts,tsx}",
       "!src/**/__tests__/**",
       "!src/**/*.d.ts"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/src/__tests__/helpers/",
+      "<rootDir>/src/domain/__tests__/fixtures.ts"
     ]
   },
   "private": true
