@@ -57,7 +57,10 @@
       "/node_modules/",
       "<rootDir>/src/__tests__/helpers/",
       "<rootDir>/src/domain/__tests__/fixtures.ts"
-    ]
+    ],
+    "moduleNameMapper": {
+      "^.*\\.(wav|mp3|m4a|aiff|ogg)$": "<rootDir>/jest.assetStub.js"
+    }
   },
   "private": true
 }
